@@ -28,3 +28,9 @@ Thumbs.db
 # 环境变量
 .env
 .env.*
+
+# SQLite 数据库
+*.db
+
+# Editable install
+*.egg-info/
