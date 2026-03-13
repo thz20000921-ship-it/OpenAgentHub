@@ -1,0 +1,18 @@
+{
+  "tools": [
+    {
+      "name": "example-agent",
+      "version": "1.0.0",
+      "description": "A sample AI agent tool to demonstrate the registry structure.",
+      "author": "OpenAgentHub Admin",
+      "entry_point": "http://localhost:8080/api/v1/execute"
+    },
+    {
+      "name": "test-post-agent",
+      "version": "1.0",
+      "description": "Tested POST API",
+      "author": "Verifier",
+      "entry_point": "http://localhost:8080/test"
+    }
+  ]
+}
