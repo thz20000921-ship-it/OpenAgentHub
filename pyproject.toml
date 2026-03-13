@@ -51,4 +51,4 @@ Issues = "https://github.com/thz20000921-ship-it/OpenAgentHub/issues"
 testpaths = ["tests"]
 
 [tool.setuptools.packages.find]
-include = ["api*", "cli*"]
+include = ["app*", "cli*"]

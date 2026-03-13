@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenAgentHub Dashboard</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f9fafb; margin: 0; padding: 20px; color: #1f2937; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 12px; border-bottom: 1px solid #e5e7eb; }
+        .title { font-size: 24px; font-weight: 700; }
+        .search-bar { display: flex; gap: 8px; margin-bottom: 24px; background: white; padding: 16px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .search-bar input, .search-bar select { padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 4px; outline: none; }
+        .search-bar button { padding: 8px 16px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .search-bar button:hover { background: #2563eb; }
+        .card { background: white; border-radius: 8px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: flex-start;}
+        .tools-col { display: flex; flex-direction: column; gap: 6px; }
+        .card h3 { margin: 0 0 8px 0; font-size: 18px; display: flex; align-items: center; gap: 12px; }
+        .desc { color: #6b7280; font-size: 14px; margin-bottom: 12px; }
+        .tags { display: flex; gap: 6px; flex-wrap: wrap;}
+        .tag { background: #eef2ff; color: #4f46e5; padding: 2px 8px; border-radius: 12px; font-size: 12px; }
+        .meta { font-size: 12px; color: #9ca3af; margin-top: 12px;}
+        .badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; text-transform: uppercase; }
+        .badge.online { background: #dcfce7; color: #166534; }
+        .badge.offline { background: #fee2e2; color: #991b1b; }
+        .badge.timeout { background: #fef9c3; color: #854d0e; }
+        .badge.invalid { background: #f3f4f6; color: #374151; }
+        .badge.unknown { background: #e5e7eb; color: #4b5563; }
+        .ep-link { color: #3b82f6; text-decoration: none; font-family: monospace; font-size: 13px; }
+        .ep-link:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="title">🪐 OpenAgentHub</div>
+            <div style="font-size: 14px; color: #6b7280;">Registry & Health Monitor</div>
+        </div>
+
+        <form class="search-bar" method="get" action="/">
+            <input type="text" name="q" placeholder="Search agents..." value="{{ q }}" style="flex:1;">
+            <select name="status">
+                <option value="">All Status</option>
+                <option value="online" {% if status == 'online' %}selected{% endif %}>Online</option>
+                <option value="offline" {% if status == 'offline' %}selected{% endif %}>Offline</option>
+                <option value="unknown" {% if status == 'unknown' %}selected{% endif %}>Unknown</option>
+            </select>
+            <button type="submit">Filter</button>
+        </form>
+
+        {% if tools %}
+            {% for t in tools %}
+            <div class="card">
+                <div class="tools-col">
+                    <h3>
+                        {{ t.name }} <span style="font-size: 14px; color: #9ca3af; font-weight: normal;">v{{ t.version }}</span>
+                        <span class="badge {{ t.status }}">{{ t.status }}</span>
+                    </h3>
+                    <div class="desc">{{ t.description }}</div>
+                    <div class="tags">
+                        {% for tag in t.tags %}
+                        <span class="tag">{{ tag }}</span>
+                        {% endfor %}
+                        <span style="font-size: 12px; color: #6b7280;">by {{ t.author }}</span>
+                    </div>
+                </div>
+                <div style="text-align: right; font-size: 12px;">
+                    <a href="{{ t.entry_point }}" target="_blank" class="ep-link">{{ t.entry_point }}</a>
+                    <div class="meta">
+                        Last check: {{ t.last_checked_at.split('.')[0].replace('T', ' ') if t.last_checked_at else 'Never' }}<br>
+                        Resp: {{ t.response_time_ms ~ 'ms' if t.response_time_ms else 'N/A' }}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div style="text-align: center; padding: 40px; color: #6b7280;">No tools found in registry.</div>
+        {% endif %}
+    </div>
+</body>
+</html>

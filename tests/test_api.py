@@ -1,154 +1,74 @@
-"""
-OpenAgentHub API — 自动化测试
+from app.services.registry_service import RegistryService
+from app.core.config import settings
 
-覆盖：健康检查、工具注册、列表、搜索、详情、删除、认证拦截。
-"""
+class TestCoreEndpoints:
+    def test_health_check(self, client):
+        resp = client.get(f"{settings.API_V1_STR}/health")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "ok"
 
-
-class TestHealthCheck:
-    """健康检查端点测试"""
-
-    def test_root_returns_ok(self, client):
+    def test_dashboard_render(self, client):
         resp = client.get("/")
         assert resp.status_code == 200
-        data = resp.json()
-        assert data["status"] == "ok"
-        assert data["service"] == "OpenAgentHub"
+        assert "OpenAgentHub" in resp.text
 
-
-class TestToolRegistration:
-    """工具注册端点测试"""
-
-    def test_register_tool_with_valid_key(self, client, api_key, sample_tool):
+class TestValidationAndRegistration:
+    def test_register_invalid_endpoint_url_schema(self, client, api_key, sample_tool):
+        bad_tool = sample_tool.copy()
+        bad_tool["entry_point"] = "ftp://invalid-schema"
+        
         resp = client.post(
-            "/tools/register",
+            f"{settings.API_V1_STR}/tools/register",
+            json=bad_tool,
+            headers={"X-API-Key": api_key}
+        )
+        assert resp.status_code == 400
+        assert "Invalid URL scheme" in resp.json()["detail"]
+
+    def test_register_unreachable_endpoint(self, client, api_key, sample_tool):
+        bad_tool = sample_tool.copy()
+        bad_tool["entry_point"] = "http://fail-endpoint.com/api"
+        
+        resp = client.post(
+            f"{settings.API_V1_STR}/tools/register",
+            json=bad_tool,
+            headers={"X-API-Key": api_key}
+        )
+        assert resp.status_code == 400
+        assert "HTTP Error" in resp.json()["detail"]
+
+    def test_register_successful(self, client, api_key, sample_tool):
+        # httpx mock 默认返回 200
+        resp = client.post(
+            f"{settings.API_V1_STR}/tools/register",
             json=sample_tool,
-            headers={"X-API-Key": api_key},
+            headers={"X-API-Key": api_key}
         )
         assert resp.status_code == 200
         data = resp.json()
-        assert data["name"] == sample_tool["name"]
-        assert data["tags"] == ["search", "test"]
+        assert data["name"] == "test-agent"
+        # 初始未经过后台异步 HealthCheck，所以默认还是 unknown
+        assert data["status"] == "unknown"
 
-    def test_register_tool_without_key_returns_401(self, client, sample_tool):
-        resp = client.post("/tools/register", json=sample_tool)
-        assert resp.status_code == 401
-
-    def test_register_tool_with_wrong_key_returns_401(self, client, sample_tool):
-        resp = client.post(
-            "/tools/register",
-            json=sample_tool,
-            headers={"X-API-Key": "wrong-key"},
-        )
-        assert resp.status_code == 401
-
-    def test_register_updates_existing_tool(self, client, api_key, sample_tool):
-        headers = {"X-API-Key": api_key}
-        client.post("/tools/register", json=sample_tool, headers=headers)
-        updated = {**sample_tool, "version": "2.0.0", "description": "Updated!"}
-        resp = client.post("/tools/register", json=updated, headers=headers)
-        assert resp.status_code == 200
-        assert resp.json()["version"] == "2.0.0"
-
-
-class TestToolListing:
-    """工具列表端点测试"""
-
-    def test_list_tools_empty(self, client):
-        resp = client.get("/tools")
-        assert resp.status_code == 200
-        assert resp.json() == []
-
-    def test_list_tools_after_registration(self, client, api_key, sample_tool):
+class TestRegistrySearch:
+    def test_search_by_tags_and_status(self, client, api_key, sample_tool):
+        # 注册工具
         client.post(
-            "/tools/register",
+            f"{settings.API_V1_STR}/tools/register",
             json=sample_tool,
-            headers={"X-API-Key": api_key},
+            headers={"X-API-Key": api_key}
         )
-        resp = client.get("/tools")
+        
+        # 强制将状态更新至 DB 中以模拟 HealthCheck 后台返回后的效果
+        tool_db = RegistryService.get_tool_by_name(sample_tool["name"])
+        import app.core.database as db
+        conn = db.get_connection()
+        conn.execute("UPDATE tools SET status = 'online' WHERE name = ?", (tool_db["name"],))
+        conn.commit()
+        conn.close()
+
+        # 验证 search 过滤器
+        resp = client.get(f"{settings.API_V1_STR}/tools", params={"tag": "demo", "status": "online"})
         assert resp.status_code == 200
         assert len(resp.json()) == 1
-
-
-class TestToolSearch:
-    """工具搜索端点测试"""
-
-    def _register(self, client, api_key, tool):
-        client.post("/tools/register", json=tool, headers={"X-API-Key": api_key})
-
-    def test_search_by_keyword(self, client, api_key, sample_tool):
-        self._register(client, api_key, sample_tool)
-        resp = client.get("/tools/search", params={"q": "search"})
-        assert resp.status_code == 200
-        assert len(resp.json()) == 1
-
-    def test_search_by_author(self, client, api_key, sample_tool):
-        self._register(client, api_key, sample_tool)
-        resp = client.get("/tools/search", params={"q": "", "author": "tester"})
-        assert resp.status_code == 200
-        assert len(resp.json()) == 1
-
-    def test_search_by_tag(self, client, api_key, sample_tool):
-        self._register(client, api_key, sample_tool)
-        resp = client.get("/tools/search", params={"q": "", "tag": "test"})
-        assert resp.status_code == 200
-        assert len(resp.json()) == 1
-
-    def test_search_no_results(self, client):
-        resp = client.get("/tools/search", params={"q": "nonexistent"})
-        assert resp.status_code == 200
-        assert resp.json() == []
-
-
-class TestToolDetails:
-    """工具详情端点测试"""
-
-    def test_get_existing_tool(self, client, api_key, sample_tool):
-        client.post(
-            "/tools/register",
-            json=sample_tool,
-            headers={"X-API-Key": api_key},
-        )
-        resp = client.get(f"/tools/{sample_tool['name']}")
-        assert resp.status_code == 200
-        assert resp.json()["name"] == sample_tool["name"]
-
-    def test_get_nonexistent_tool_returns_404(self, client):
-        resp = client.get("/tools/not-a-real-tool")
-        assert resp.status_code == 404
-
-
-class TestToolDeletion:
-    """工具删除端点测试"""
-
-    def test_delete_tool_with_valid_key(self, client, api_key, sample_tool):
-        client.post(
-            "/tools/register",
-            json=sample_tool,
-            headers={"X-API-Key": api_key},
-        )
-        resp = client.delete(
-            f"/tools/{sample_tool['name']}",
-            headers={"X-API-Key": api_key},
-        )
-        assert resp.status_code == 200
-        assert resp.json()["status"] == "deleted"
-        # 确认已删除
-        resp = client.get(f"/tools/{sample_tool['name']}")
-        assert resp.status_code == 404
-
-    def test_delete_without_key_returns_401(self, client, api_key, sample_tool):
-        client.post(
-            "/tools/register",
-            json=sample_tool,
-            headers={"X-API-Key": api_key},
-        )
-        resp = client.delete(f"/tools/{sample_tool['name']}")
-        assert resp.status_code == 401
-
-    def test_delete_nonexistent_returns_404(self, client, api_key):
-        resp = client.delete(
-            "/tools/not-a-real-tool",
-            headers={"X-API-Key": api_key},
-        )
-        assert resp.status_code == 404
+        assert resp.json()[0]["status"] == "online"

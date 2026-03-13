@@ -1,190 +1,121 @@
-# 🚀 OpenAgentHub
+# OpenAgentHub
 
-[![CI](https://github.com/thz20000921-ship-it/OpenAgentHub/actions/workflows/ci.yml/badge.svg)](https://github.com/thz20000921-ship-it/OpenAgentHub/actions)
+**A lightweight open-source platform for registering, discovering, validating, and monitoring AI agent tools.**
+
+[![Build Status](https://img.shields.io/github/actions/workflow/status/thz20000921-ship-it/OpenAgentHub/ci.yml?branch=main)](https://github.com/thz20000921-ship-it/OpenAgentHub/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 
-> A lightweight AI Agent tool registry and marketplace — think **npm, but for AI agents**.
+## What problem it solves
 
-OpenAgentHub provides a simple, self-hostable API for discovering, registering, and managing AI agent tools. It is designed to be the central catalog where developers publish their agent capabilities and consumers find the right tool for the job.
+Building complex, multi-agent workflows requires developers to wire together various AI agent endpoints. Managing these remote tools manually leads to scattered configuration files, broken production workflows due to unavailable endpoints, and an unmaintainable developer experience. 
 
-## ✨ Features
+## Why existing agent tooling is fragmented
 
-- **Tool Registry** — Register AI agent tools with rich metadata (name, version, author, tags, entry point).
-- **Search & Filter** — Find tools by keyword, author, or tag via the search API.
-- **API Key Authentication** — Write operations are protected; read operations are public.
-- **CLI Client** — Manage tools from the command line with `openagent`.
-- **SQLite Backend** — Reliable, zero-config persistent storage.
-- **Lightweight & Fast** — Built on FastAPI, ready for production.
-- **Self-Hostable** — Run your own private registry in seconds.
+Currently, the ecosystem defines how agents *think* or *act* (like LangChain, LlamaIndex, or AutoGen), but lacks standard infrastructure to *manage* them. Developers need a centralized registry where tools can be dynamically registered, tagged, and actively monitored for their network health.
 
-## 🏗️ Architecture
+## What OpenAgentHub does
+
+OpenAgentHub helps developers manage AI agent tools through a unified registry with discovery, validation, and health monitoring. It is designed for teams building agent workflows who need a simple way to organize and verify tool endpoints.
+
+It acts as the single source of truth for your agent network.
+
+## Core features
+
+- **Tool Health Check:** Active monitoring tracking whether agents are `online`, `offline`, or `timeout`, recording exact response latencies.
+- **Validate Tool on Register:** Strict validation on registration—rejecting dead links or malformed endpoints, keeping the registry clean.
+- **Web Dashboard:** A clean, zero-configuration self-hosted UI out of the box. 
+- **Tagging & Filtering:** Categorical tagging support (e.g. `RAG`, `SAST`, `database`, `github`) facilitating easy discovery.
+- **Developer CLI:** A robust CLI `openagent` tailored for automation and quick lookup.
+
+## Architecture
+
+OpenAgentHub relies on a scalable Python FastAPI backend powered by an asynchronous service layer. It uses a lightweight local SQLite database (optimized with WAL mode) for minimal setup, while enabling robust dependency separation via its `app/core`, `app/models`, and `app/services` structures.
 
 ```mermaid
 graph TD
-    CLI["🖥️ CLI Client<br/>(openagent)"]
-    Client["🌐 HTTP Client"]
-    Auth["🔐 API Key Auth"]
-    API["⚡ FastAPI Server<br/>(api/server.py)"]
-    DB["🗄️ SQLite Database<br/>(openagent.db)"]
-
-    CLI -- "HTTP requests" --> API
-    Client -- "HTTP requests" --> API
-    API -- "Write ops" --> Auth
-    Auth --> DB
-    API -- "Read ops" --> DB
+    User(Agent Orchestrator) -->|REST API / CLI| Server(FastAPI Server)
+    CLI(OpenAgent CLI) -->|REST API| Server
+    WebSite(Web Dashboard) -->|Jinja Templates| Server
+    
+    Server --> RegistrySvc(Registry Service)
+    Server --> ValidSvc(Validation Service)
+    Server --> HealthSvc(Health Check Service)
+    
+    RegistrySvc --> DB[(SQLite Database)]
+    HealthSvc --> DB
+    
+    ValidSvc -->|Async HTTP Ping| AgentTools((Remote Agents))
+    HealthSvc -->|Background Pings| AgentTools
 ```
 
-## 📂 Project Structure
-
-```
-OpenAgentHub/
-├── api/
-│   ├── __init__.py
-│   ├── database.py      # SQLite data layer (CRUD + search)
-│   └── server.py         # FastAPI application with route handlers
-├── cli/
-│   ├── __init__.py
-│   └── main.py            # CLI client (click-based)
-├── tests/
-│   ├── conftest.py        # Shared pytest fixtures
-│   └── test_api.py        # API test suite (15 test cases)
-├── .github/
-│   ├── workflows/ci.yml   # GitHub Actions CI pipeline
-│   ├── ISSUE_TEMPLATE/    # Bug report & feature request templates
-│   └── pull_request_template.md
-├── pyproject.toml         # Project metadata & dependencies
-├── CONTRIBUTING.md        # Contribution guidelines
-├── LICENSE                # MIT License
-└── README.md
-```
-
-## 🚀 Quick Start
-
-### Prerequisites
-
-- Python 3.10+
-- pip
+## Quick Start
 
 ### Installation
 
+Requires Python 3.10+. Clone the repository and install the application in editable mode with development dependencies:
+
 ```bash
-# Clone the repository
 git clone https://github.com/thz20000921-ship-it/OpenAgentHub.git
 cd OpenAgentHub
 
-# Create a virtual environment
-python -m venv .venv
-source .venv/bin/activate   # On Windows: .venv\Scripts\activate
-
-# Install in development mode
+# Install OpenAgentHub and CLI
 pip install -e ".[dev]"
+
+# Optionally load seed data
+python scripts/seed.py
 ```
 
-### Run the server
+### Running the Server
 
 ```bash
-uvicorn api.server:app --reload --port 8000
+uvicorn app.api.server:app --port 8000
 ```
+Open `http://127.0.0.1:8000` in your browser to view the generated Dashboard.
 
-On startup, the server will print a generated API key:
-```
-🔑 Generated API Key (set OPENAGENT_API_KEY env var to override):
-   <your-api-key>
-```
+## CLI Examples
 
-Then open [http://localhost:8000/docs](http://localhost:8000/docs) to explore the interactive Swagger UI.
-
-## 📡 API Endpoints
-
-| Method | Endpoint                | Auth Required | Description                        |
-| ------ | ----------------------- | ------------- | ---------------------------------- |
-| GET    | `/`                     | ❌            | Health check                       |
-| GET    | `/tools`                | ❌            | List all registered tools          |
-| GET    | `/tools/search`         | ❌            | Search tools (by keyword/author/tag) |
-| GET    | `/tools/{tool_name}`    | ❌            | Get details of a specific tool     |
-| POST   | `/tools/register`       | ✅            | Register or update a tool          |
-| DELETE | `/tools/{tool_name}`    | ✅            | Delete a tool                      |
-
-### Example: Register a new tool
+The `openagent` CLI uses your environment settings.
 
 ```bash
-curl -X POST http://localhost:8000/tools/register \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: YOUR_API_KEY" \
-  -d '{
-    "name": "web-scraper-agent",
-    "version": "0.1.0",
-    "description": "An agent that scrapes and summarizes web pages",
-    "author": "alice",
-    "tags": ["web", "scraper", "summarizer"],
-    "entry_point": "http://localhost:9000/scrape"
-  }'
-```
-
-### Example: Search tools
-
-```bash
-# Search by keyword
-curl "http://localhost:8000/tools/search?q=scraper"
-
-# Filter by tag
-curl "http://localhost:8000/tools/search?tag=web"
-
-# Filter by author
-curl "http://localhost:8000/tools/search?author=alice"
-```
-
-## 🖥️ CLI Usage
-
-```bash
-# List all tools
+# List all agents
 openagent list
 
-# Search for tools
-openagent search "web scraper"
-openagent search "agent" --tag web --author alice
+# Filter agents by tag
+openagent search "" --tag security
 
-# Get tool details
-openagent info web-scraper-agent
-
-# Register a new tool (interactive prompts)
-openagent register
-
-# Use a custom server
-openagent --server http://my-registry:8000 list
+# Preview an agent
+openagent info github-pr-review-agent
 ```
 
-## 🧪 Running Tests
+## API Examples
 
+**Search Tools:**
 ```bash
-# Run all tests
-pytest tests/ -v
-
-# Run with coverage
-pytest tests/ -v --tb=short
-
-# Lint check
-flake8 api/ cli/ --max-line-length=120
+curl "http://localhost:8000/api/v1/tools?tag=github&status=online"
 ```
 
-## 🛣️ Roadmap
+**Register a Tool (Validates Endpoint):**
+```bash
+curl -X POST "http://localhost:8000/api/v1/tools/register" \
+     -H "Content-Type: application/json" \
+     -H "X-API-Key: YOUR_API_KEY" \
+     -d '{
+           "name": "calc-agent",
+           "version": "1.0.0",
+           "description": "Calculates math expressions",
+           "tags": ["utility", "math"],
+           "entry_point": "https://api.example.com/calc"
+         }'
+```
 
-- [x] SQLite persistent storage
-- [x] Search & filter API
-- [x] API Key authentication
-- [x] CLI client
-- [x] GitHub Actions CI
-- [ ] Tool versioning and changelogs
-- [ ] Rate limiting
-- [ ] Web-based dashboard
-- [ ] Plugin system for custom backends
-- [ ] Tool dependency management
+*(Note: Validation requires the `entry_point` to actually be reachable during the registration POST. If it fails to respond, a HTTP 400 Bad Request is returned).*
 
-## 🤝 Contributing
+## Roadmap
 
-We welcome contributions! Please read our [Contributing Guide](CONTRIBUTING.md) for details.
+See our evolving plan in [roadmap.md](./roadmap.md). We are actively exploring MCP integration, multi-tenant roles, and extensible database plugins.
 
-## 📄 License
+## Use cases
 
-This project is open-source and available under the [MIT License](LICENSE).
+1. **Enterprise Orchestration:** As the source-of-truth service directory for LangGraph/AutoGen multi-agent swarms.
+2. **Open Source Ecosystems:** Hosting community-driven Agent libraries. 
+3. **CI/CD Pipelines:** Validating the up-state of dependent agents before executing prompt-based testing.
